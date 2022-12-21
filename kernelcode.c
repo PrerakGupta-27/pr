@@ -1,60 +1,109 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<sys/socket.h>
+#include<sys/un.h>
+#include<unistd.h>
+#include<time.h>
 
-#define NUM_PHILOSOPHERS 5
+#define SOCKET_NAME "mhrydv.socket"
+// #define BUFFER_SIZE 10
 
-void pickup_forks(int philosopher_id) {
-// Pick up the left fork
-printf("Philosopher %d: Picking up left fork\n", philosopher_id);
+char Choices[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-// Pick up the right fork
-printf("Philosopher %d: Picking up right fork\n", philosopher_id);
+char array[51][12];
+
+void generator(){
+    srand(time(NULL));
+    for(int i=0;i<250;i++){
+        array[i] = Choices[rand() % 52];
+    }
 }
 
-void return_forks(int philosopher_id) {
-// Put down the left fork
-printf("Philosopher %d: Putting down left fork\n", philosopher_id);
-
-// Put down the right fork
-printf("Philosopher %d: Putting down right fork\n", philosopher_id);
+void getRandStr() {        
+    srand (time(NULL));                            
+    for (int j = 0; j <= 50; j++) {
+        array[j][0] = j;
+    }
+    
+    for(int i = 0; i <= 50; i++) {
+		for(int j = 1; j <= 10; j++) {
+			array[i][j] = rand() % 26 + 65;
+		}
+	}
 }
 
-void eat(int philosopher_id) {
-printf("Philosopher %d: Eating\n", philosopher_id);
-sleep(1);
-}
 
-void think(int philosopher_id) {
-printf("Philosopher %d: Thinking\n", philosopher_id);
-sleep(1);
-}
+int main(int argc, char* argv[]) {
 
-void* philosopher_thread(void* philosopher_id_ptr) {
-int philosopher_id = ((int) philosopher_id_ptr);
+	getRandStr();
+    int l=0;
+    for(int i=0;i<=50;i++){
+        for(int j=0;j<12;j++){
+            printf("%c",array[i][j]);
+        }
+        printf("\n");
+    }
 
-while (1) {
-think(philosopher_id);
-pickup_forks(philosopher_id);
-eat(philosopher_id);
-return_forks(philosopher_id);
-}
+	struct sockaddr_un addr;
+	int ret;
+	int data_socket;
+	char buffer[100];
 
-return NULL;
-}
+	data_socket = socket(AF_UNIX, SOCK_SEQPACKET, 0);
 
-int main() {
-pthread_t philosophers[NUM_PHILOSOPHERS];
-int philosopher_ids[NUM_PHILOSOPHERS];
+	memset(&addr, 0, sizeof(addr));
 
-for (int i = 0; i < NUM_PHILOSOPHERS; i++) {
-philosopher_ids[i] = i;
-pthread_create(&philosophers[i], NULL, philosopher_thread, &philosopher_ids[i]);
-}
+	addr.sun_family = AF_UNIX;
+	strncpy(addr.sun_path, SOCKET_NAME, sizeof(addr.sun_path) - 1);
+	ret = connect(data_socket, (const struct sockaddr *) &addr, sizeof(addr));
 
-for (int i = 0; i < NUM_PHILOSOPHERS; i++) {
-pthread_join(philosophers[i], NULL);
-}
 
-return 0;
+	if(argc > 1) {
+		strncpy(buffer, "DOWN", sizeof("DOWN"));
+		write(data_socket, buffer, sizeof(buffer));
+		close(data_socket);
+		exit(EXIT_SUCCESS);
+	}
+	else {
+		int lastIdx = 1;int r=1;
+		int b=0;
+		int a=0;
+		while(r) {
+
+			int k=0;
+			for(int i=0;i<5;i++){
+				for(int j=0;j<5;j++){
+					buffer[k++]=array[a++];
+				}
+				buffer[k++]='\n';
+			}
+
+			printf("Sent string from %d to %d \n",b,b+5);
+
+        	ret = write(data_socket, buffer, strlen(buffer) + 1);
+        	// memset(buffer, 0, 100);
+
+			//Reading Acknowledgements
+			ret = read(data_socket, buffer, sizeof(buffer));
+
+			buffer[sizeof(buffer) - 1] = 0;
+			int finalIdx = atoi(buffer);
+			
+			printf("MAX ID SENT BACK BY SERVER = %s\n\n", buffer);
+			if(finalIdx == 50) {
+				printf("Successfully sent all Strings\n");
+				strncpy(buffer, "DOWN", sizeof("DOWN"));
+				write(data_socket, buffer, sizeof(buffer));
+				close(data_socket);
+				exit(EXIT_SUCCESS);
+				r=0;
+			
+			}
+			else {
+				lastIdx = finalIdx + 1;
+			}
+			b+=5;
+		}
+	}
 }
