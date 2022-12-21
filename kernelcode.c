@@ -6,58 +6,60 @@
 #include<unistd.h>
 #include<time.h>
 
-#define SOCKET_NAME "mhrydv.socket"
-// #define BUFFER_SIZE 10
+#define SOCKET_NAME "mySocket.socket"
+#define BUFFER_SIZE 10
 
-char Choices[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-char array[51][12];
-
-void generator(){
-    srand(time(NULL));
-    for(int i=0;i<250;i++){
-        array[i] = Choices[rand() % 52];
-    }
-}
-
-void getRandStr() {        
+void getRandStr(char randstrs[][12]) {        
     srand (time(NULL));                            
     for (int j = 0; j <= 50; j++) {
-        array[j][0] = j;
+        randstrs[j][0] = j;
     }
     
     for(int i = 0; i <= 50; i++) {
 		for(int j = 1; j <= 10; j++) {
-			array[i][j] = rand() % 26 + 65;
+			randstrs[i][j] = rand() % 26 + 65;
 		}
 	}
 }
 
-
 int main(int argc, char* argv[]) {
-
-	getRandStr();
-    int l=0;
-    for(int i=0;i<=50;i++){
-        for(int j=0;j<12;j++){
-            printf("%c",array[i][j]);
-        }
-        printf("\n");
-    }
-
 	struct sockaddr_un addr;
 	int ret;
 	int data_socket;
-	char buffer[100];
+	char buffer[BUFFER_SIZE];
 
+	//Creating data socket
 	data_socket = socket(AF_UNIX, SOCK_SEQPACKET, 0);
+	if(data_socket == -1) {
+		perror("Couldn't create socket");
+		exit(EXIT_FAILURE);
+	}	
 
 	memset(&addr, 0, sizeof(addr));
 
+	//For local connections
 	addr.sun_family = AF_UNIX;
 	strncpy(addr.sun_path, SOCKET_NAME, sizeof(addr.sun_path) - 1);
 	ret = connect(data_socket, (const struct sockaddr *) &addr, sizeof(addr));
 
+	if(ret == -1) {
+		perror("Server is down\n");
+		exit(EXIT_FAILURE);
+	}	
+
+	//Writing data
+	char randStr[51][12] = {{0}};
+	getRandStr(randStr);
+	
+	for(int i = 1; i <= 50; i++) {
+		for(int j = 0; j < 12; j++) {
+			if(j == 0) {
+				printf("%d ", randStr[i][j]);
+			}
+			else printf("%c", randStr[i][j]);
+		}
+		printf("\n");
+	}
 
 	if(argc > 1) {
 		strncpy(buffer, "DOWN", sizeof("DOWN"));
@@ -66,26 +68,22 @@ int main(int argc, char* argv[]) {
 		exit(EXIT_SUCCESS);
 	}
 	else {
-		int lastIdx = 1;int r=1;
-		int b=0;
-		int a=0;
-		while(r) {
-
-			int k=0;
-			for(int i=0;i<5;i++){
-				for(int j=0;j<5;j++){
-					buffer[k++]=array[a++];
+		int lastIdx = 1;
+		while(1) {
+			printf("sending Strings Indexed from %d to %d\n", lastIdx, lastIdx + 4);
+			for(int i = lastIdx; i < lastIdx + 5; i++) {
+				ret = write(data_socket, randStr[i], strlen(randStr[i]) + 1);
+				if(ret == -1) {
+					perror("couldn't write");
 				}
-				buffer[k++]='\n';
 			}
-
-			printf("Sent string from %d to %d \n",b,b+5);
-
-        	ret = write(data_socket, buffer, strlen(buffer) + 1);
-        	// memset(buffer, 0, 100);
 
 			//Reading Acknowledgements
 			ret = read(data_socket, buffer, sizeof(buffer));
+			if(ret == -1) {
+				perror("read");
+				exit(EXIT_FAILURE);
+			}
 
 			buffer[sizeof(buffer) - 1] = 0;
 			int finalIdx = atoi(buffer);
@@ -97,13 +95,11 @@ int main(int argc, char* argv[]) {
 				write(data_socket, buffer, sizeof(buffer));
 				close(data_socket);
 				exit(EXIT_SUCCESS);
-				r=0;
-			
+				break;
 			}
 			else {
 				lastIdx = finalIdx + 1;
 			}
-			b+=5;
 		}
 	}
 }
